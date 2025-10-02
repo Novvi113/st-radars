@@ -10,11 +10,11 @@ import io
 #Loading Data
 @st.cache_data
 def get_player_df():
-    return pd.read_csv("Top5PlayerData202025.csv")
+    return pd.read_csv("Top5PlayerData202026.csv")
 
 @st.cache_data
 def get_team_df():
-    return pd.read_csv("Top5TeamData202025.csv")
+    return pd.read_csv("Top5TeamData202026.csv")
 
 player_df =get_player_df()
 team_df = get_team_df()

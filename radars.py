@@ -9,10 +9,10 @@ import io
 
 #Loading Data
 def get_player_df():
-    return pd.read_csv("Top5PlayerData202526.csv")
+    return pd.read_csv("PlayerDataTest.csv")
 
 def get_team_df():
-    return pd.read_csv("Top5TeamData202526.csv")
+    return pd.read_csv("PlayerDataTest.csv")
 
 player_df = get_player_df()
 team_df = get_team_df()
@@ -474,6 +474,7 @@ st.download_button(
     file_name = filename,
     mime = "image/png"
 )
+
 
 
 

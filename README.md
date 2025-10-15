@@ -1,4 +1,5 @@
-# The BB (Backseat Baller) Radar App - bb-radars.streamlit.app
+# The BB (Backseat Baller) Radar App
+bb-radars.streamlit.app
 - An app for analysts and casual fans, that generates downloadable radar charts for player comparisons.
 - Select one of the four attribute groups (Creating, Possession, Shooting, Defending) as well as two players and watch the app generate a radar chart!
 - Metrics are log-transformed and Z-scored as well as possession adjusted (for defensive metrics)

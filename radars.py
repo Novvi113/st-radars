@@ -8,18 +8,25 @@ import matplotlib.pyplot as plt
 import io
 
 #Loading Data
+@st.cache_data
 def get_player_df():
-    return pd.read_csv("Top5PlayerData202526.csv")
+    return pd.read_csv("PlayerDataTest.csv")
 
+@st.cache_data
 def get_team_df():
-    return pd.read_csv("Top5TeamData202526.csv")
+    return pd.read_csv("TeamDataTest.csv")
 
 player_df = get_player_df()
 team_df = get_team_df()
 
 #Data cleaning and transformation
 team_data = team_df[team_df["Team_or_Opponent"] == "team"]
+team_data["Comp"] = team_df["Competition_Name"]
 df = pd.merge(player_df, team_data[["Season_End_Year", "Comp", "Squad", "Poss"]], how="left", on=["Season_End_Year", "Comp", "Squad"])
+
+#leagues without advanced data
+leagues_to_drop = ["LaLiga2", "2.Bundesliga", "Ligue 2"]
+df = df[~df["Comp"].isin(leagues_to_drop)]
 
 #Function to convert to per 90
 def to_per_90(metric, mins_per_90 = df["Mins_Per_90"]):
@@ -60,20 +67,26 @@ st.sidebar.header("Choose Your Players!")
 #Subheader
 st.sidebar.subheader("Player 1")
 
-#Team Selection
-p1_squad_selection = st.sidebar.selectbox(label = "Squad",
-                                         options = df_clean["Squad"].unique(),
-                                         placeholder = "Select squad...",
-                                         key = "P1_Squad")
+#League Selection
+p1_league_selection = st.sidebar.selectbox(label =  "League",
+                                           options = df_clean["Comp"].unique(),
+                                           placeholder= "Select league...",
+                                           key = "P1_League")
 
-#getting avaliable seasons from team selection
-p1_available_seasons = df_clean["Season"].loc[df_clean["Squad"] == p1_squad_selection].unique()
+p1_available_seasons = df_clean["Season"].loc[df_clean["Comp"] == p1_league_selection].unique()
 
 #Season Selection
 p1_season_selection = st.sidebar.selectbox(label = "Season",
                      options = p1_available_seasons,
                      placeholder = "Select season...",
                      key = "P1_Season")
+
+p1_available_squads = df_clean["Squad"].loc[(df_clean["Comp"] == p1_league_selection) & (df_clean["Season"] == p1_season_selection)].unique()
+#Team Selection
+p1_squad_selection = st.sidebar.selectbox(label = "Squad",
+                                         options = p1_available_squads,
+                                         placeholder = "Select squad...",
+                                         key = "P1_Squad")
 
 #getting available players from season selection
 p1_available_players = df_clean["Player"].loc[(df_clean["Squad"] == p1_squad_selection) & (df_clean["Season"] == p1_season_selection)].unique()
@@ -88,20 +101,26 @@ p1_name_selection = st.sidebar.selectbox(label = "Player Name",
 #Subheader
 st.sidebar.subheader("Player 2")
 
-#Team Selection
-p2_squad_selection = st.sidebar.selectbox(label = "Squad",
-                                         options = df_clean["Squad"].unique(),
-                                         placeholder = "Select squad...",
-                                         key = "P2_Squad")
+#League Selection
+p2_league_selection = st.sidebar.selectbox(label =  "League",
+                                           options = df_clean["Comp"].unique(),
+                                           placeholder= "Select league...",
+                                           key = "P2_League")
 
-#getting avaliable seasons from team selection
-p2_available_seasons = df_clean["Season"].loc[df_clean["Squad"] == p2_squad_selection].unique()
+p2_available_seasons = df_clean["Season"].loc[df_clean["Comp"] == p2_league_selection].unique()
 
 #Season Selection
 p2_season_selection = st.sidebar.selectbox(label = "Season",
                      options = p2_available_seasons,
                      placeholder = "Select season...",
                      key = "P2_Season")
+
+p2_available_squads = df_clean["Squad"].loc[(df_clean["Comp"] == p2_league_selection) & (df_clean["Season"] == p2_season_selection)].unique()
+#Team Selection
+p2_squad_selection = st.sidebar.selectbox(label = "Squad",
+                                         options = p2_available_squads,
+                                         placeholder = "Select squad...",
+                                         key = "P2_Squad")
 
 #getting available players from season selection
 p2_available_players = df_clean["Player"].loc[(df_clean["Squad"] == p2_squad_selection) & (df_clean["Season"] == p2_season_selection)].unique()
@@ -256,17 +275,16 @@ poss2 = poss_df[(poss_df["Player"] == p2_name_selection) & (poss_df["Season"] ==
 shooting1 = shooting_df[(shooting_df["Player"] == p1_name_selection) & (shooting_df["Season"] == p1_season_selection)][shooting_vars].values.tolist()[0]
 shooting2 = shooting_df[(shooting_df["Player"] == p2_name_selection) & (shooting_df["Season"] == p2_season_selection)][shooting_vars].values.tolist()[0]
 
-player1_club = creating_df[(creating_df["Player"] == p1_name_selection) & (creating_df["Season"] == p1_season_selection)]["Squad"].values.tolist()[0].upper()
-player2_club = creating_df[(creating_df["Player"] == p2_name_selection) & (creating_df["Season"] == p2_season_selection)]["Squad"].values.tolist()[0].upper()
-
-player1_league = creating_df[(creating_df["Player"] == p1_name_selection) & (creating_df["Season"] == p1_season_selection)]["Comp"].values.tolist()[0].upper()
-player2_league = creating_df[(creating_df["Player"] == p2_name_selection) & (creating_df["Season"] == p2_season_selection)]["Comp"].values.tolist()[0].upper()
-
 player1_season = creating_df[(creating_df["Player"] == p1_name_selection) & (creating_df["Season"] == p1_season_selection)]["Season"].values.tolist()[0]
 player2_season = creating_df[(creating_df["Player"] == p2_name_selection) & (creating_df["Season"] == p2_season_selection)]["Season"].values.tolist()[0]
 
 players = [name.upper() for name in [p1_name_selection, p2_name_selection]]
 
+p1_squad_selection = p1_squad_selection.upper()
+p2_squad_selection = p2_squad_selection.upper()
+
+p1_league_selection = p1_league_selection.upper()
+p2_league_selection = p2_league_selection.upper()
 
 #radar
 if radar_category == "Creating":
@@ -297,11 +315,11 @@ if radar_category == "Creating":
     newax2.imshow(p2_badge)
     newax2.axis("off")
 
-    endnote_text = axs["endnote"].text(1, 0.5, "Viz by @TheNumbers_Game. Metrics log-transformed and Z-scored. Data from Opta.", fontsize = 10, ha = "right", va = "center")
+    endnote_text = axs["endnote"].text(1, 0.5, "Viz by @TheNumbers_Game via the BB Radars App. Metrics log-transformed and Z-scored. Data from Opta.", fontsize = 10, ha = "right", va = "center")
     title1_text = axs["title"].text(0.01, 0.65, players[0], fontsize = 30, ha = "left", va = "center", fontproperties = {"weight": "bold"})
     title2_text = axs["title"].text(0.99, 0.65, players[1], fontsize = 30, ha = "right", va = "center", fontproperties = {"weight": "bold"})
-    subtitle1_text = axs["title"].text(0.01, 0.25, f"{player1_club} - {player1_league} - {player1_season}", fontsize = 17 , ha = "left", va = "center")
-    subtitle1_text = axs["title"].text(0.99, 0.25, f"{player2_club} - {player2_league} - {player2_season}", fontsize = 17 , ha = "right", va = "center")
+    subtitle1_text = axs["title"].text(0.01, 0.25, f"{p1_squad_selection} - {p1_league_selection} - {player1_season}", fontsize = 17 , ha = "left", va = "center")
+    subtitle1_text = axs["title"].text(0.99, 0.25, f"{p2_squad_selection} - {p2_league_selection} - {player2_season}", fontsize = 17 , ha = "right", va = "center")
     category_text = axs["endnote"].text(0.05, 0.5, "CREATING", fontsize = 26, ha = "center", va = "center", fontproperties = {"weight": "bold"})
 
     rectange1 = axs["title"].add_patch(plt.Rectangle((0.01, 0), 0.4, 0.1, facecolor = "#1c56a5", lw = 2, zorder = 1))
@@ -343,11 +361,11 @@ elif radar_category == "Defense":
     newax2.imshow(p2_badge)
     newax2.axis("off")
 
-    endnote_text = axs["endnote"].text(1, 0.5, "Viz by @TheNumbers_Game. Metrics log-transformed and Z-scored. Data from Opta.", fontsize = 10, ha = "right", va = "center")
+    endnote_text = axs["endnote"].text(1, 0.5, "Viz by @TheNumbers_Game via the BB Radars App. Metrics log-transformed and Z-scored. Data from Opta.", fontsize = 10, ha = "right", va = "center")
     title1_text = axs["title"].text(0.01, 0.65, players[0], fontsize = 30, ha = "left", va = "center", fontproperties = {"weight": "bold"})
     title2_text = axs["title"].text(0.99, 0.65, players[1], fontsize = 30, ha = "right", va = "center", fontproperties = {"weight": "bold"})
-    subtitle1_text = axs["title"].text(0.01, 0.25, f"{player1_club} - {player1_league} - {player1_season}", fontsize = 17 , ha = "left", va = "center")
-    subtitle1_text = axs["title"].text(0.99, 0.25, f"{player2_club} - {player2_league} - {player2_season}", fontsize = 17 , ha = "right", va = "center")
+    subtitle1_text = axs["title"].text(0.01, 0.25, f"{p1_squad_selection} - {p1_league_selection} - {player1_season}", fontsize = 17 , ha = "left", va = "center")
+    subtitle1_text = axs["title"].text(0.99, 0.25, f"{p2_squad_selection} - {p2_league_selection} - {player2_season}", fontsize = 17 , ha = "right", va = "center")
     category_text = axs["endnote"].text(0.05, 0.5, "DEFENDING", fontsize = 26, ha = "center", va = "center", fontproperties = {"weight": "bold"})
 
     rectange1 = axs["title"].add_patch(plt.Rectangle((0.01, 0), 0.4, 0.1, facecolor = "#1c56a5", lw = 2, zorder = 1))
@@ -391,11 +409,11 @@ elif radar_category == "Possession":
     newax2.imshow(p2_badge)
     newax2.axis("off")
 
-    endnote_text = axs["endnote"].text(1, 0.5, "Viz by @TheNumbers_Game. Metrics log-transformed and Z-scored. Data from Opta.", fontsize = 10, ha = "right", va = "center")
+    endnote_text = axs["endnote"].text(1, 0.5, "Viz by @TheNumbers_Game via the BB Radars App. Metrics log-transformed and Z-scored. Data from Opta.", fontsize = 10, ha = "right", va = "center")
     title1_text = axs["title"].text(0.01, 0.65, players[0], fontsize = 30, ha = "left", va = "center", fontproperties = {"weight": "bold"})
     title2_text = axs["title"].text(0.99, 0.65, players[1], fontsize = 30, ha = "right", va = "center", fontproperties = {"weight": "bold"})
-    subtitle1_text = axs["title"].text(0.01, 0.25, f"{player1_club} - {player1_league} - {player1_season}", fontsize = 17 , ha = "left", va = "center")
-    subtitle1_text = axs["title"].text(0.99, 0.25, f"{player2_club} - {player2_league} - {player2_season}", fontsize = 17 , ha = "right", va = "center")
+    subtitle1_text = axs["title"].text(0.01, 0.25, f"{p1_squad_selection} - {p1_league_selection} - {player1_season}", fontsize = 17 , ha = "left", va = "center")
+    subtitle1_text = axs["title"].text(0.99, 0.25, f"{p2_squad_selection} - {p2_league_selection} - {player2_season}", fontsize = 17 , ha = "right", va = "center")
     category_text = axs["endnote"].text(0.05, 0.5, "POSSESSION", fontsize = 26, ha = "center", va = "center", fontproperties = {"weight": "bold"})
 
     rectange1 = axs["title"].add_patch(plt.Rectangle((0.01, 0), 0.4, 0.1, facecolor = "#1c56a5", lw = 2, zorder = 1))
@@ -439,11 +457,11 @@ elif radar_category == "Shooting":
     newax2.imshow(p2_badge)
     newax2.axis("off")
 
-    endnote_text = axs["endnote"].text(1, 0.5, "Viz by @TheNumbers_Game. Metrics log-transformed and Z-scored. Data from Opta.", fontsize = 10, ha = "right", va = "center")
+    endnote_text = axs["endnote"].text(1, 0.5, "Viz by @TheNumbers_Game via the BB Radars App. Metrics log-transformed and Z-scored. Data from Opta.", fontsize = 10, ha = "right", va = "center")
     title1_text = axs["title"].text(0.01, 0.65, players[0], fontsize =30, ha = "left", va = "center", fontproperties = {"weight": "bold"})
     title2_text = axs["title"].text(0.99, 0.65, players[1], fontsize = 30, ha = "right", va = "center", fontproperties = {"weight": "bold"})
-    subtitle1_text = axs["title"].text(0.01, 0.25, f"{player1_club} - {player1_league} - {player1_season}", fontsize = 17 , ha = "left", va = "center")
-    subtitle1_text = axs["title"].text(0.99, 0.25, f"{player2_club} - {player2_league} - {player2_season}", fontsize = 17 , ha = "right", va = "center")
+    subtitle1_text = axs["title"].text(0.01, 0.25, f"{p1_squad_selection} - {p1_league_selection} - {player1_season}", fontsize = 17 , ha = "left", va = "center")
+    subtitle1_text = axs["title"].text(0.99, 0.25, f"{p2_squad_selection} - {p2_league_selection} - {player2_season}", fontsize = 17 , ha = "right", va = "center")
     category_text = axs["endnote"].text(0.05, 0.5, "SHOOTING", fontsize = 26, ha = "center", va = "center", fontproperties = {"weight": "bold"})
 
     rectange1 = axs["title"].add_patch(plt.Rectangle((0.01, 0), 0.4, 0.1, facecolor = "#1c56a5", lw = 2, zorder = 1))
@@ -474,10 +492,6 @@ st.download_button(
     file_name = filename,
     mime = "image/png"
 )
-
-
-
-
 
 
 

@@ -8,11 +8,9 @@ import matplotlib.pyplot as plt
 import io
 
 #Loading Data
-@st.cache_data
 def get_player_df():
     return pd.read_csv("PlayerDataTest.csv")
 
-@st.cache_data
 def get_team_df():
     return pd.read_csv("TeamDataTest.csv")
 
@@ -492,6 +490,7 @@ st.download_button(
     file_name = filename,
     mime = "image/png"
 )
+
 
 
 

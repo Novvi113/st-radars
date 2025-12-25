@@ -11,12 +11,14 @@ st.set_page_config(page_title="Сравнение Игроков", layout="wide"
 @st.cache_data
 def load_data():
     file_path = 'Top5PlayerData202526.csv'
-    try:
-        df = pd.read_csv(file_path, encoding='latin1')
-    except:
-        df = pd.read_csv(file_path)
     
-    # Очистка имен колонок
+    # Сначала пробуем UTF-8 (стандарт), если не выйдет - тогда latin1
+    try:
+        df = pd.read_csv(file_path, encoding='utf-8')
+    except UnicodeDecodeError:
+        df = pd.read_csv(file_path, encoding='latin1')
+    
+    # Очистка имен колонок от пробелов
     df.columns = [c.strip() for c in df.columns]
     return df
 
@@ -42,6 +44,7 @@ def main():
     # Фильтр позиций
     if 'Pos' in df.columns:
         all_positions = df['Pos'].unique().tolist()
+        # По умолчанию выбираем первую позицию, чтобы список не был пустым
         pos_filter = st.sidebar.multiselect("Фильтр позиций", all_positions, default=all_positions[:1])
         if pos_filter:
             df_filtered = df[df['Pos'].isin(pos_filter)]
@@ -52,24 +55,31 @@ def main():
 
     players_list = df_filtered['Player'].unique()
     
+    if len(players_list) == 0:
+        st.warning("Нет игроков с выбранной позицией.")
+        return
+
     with col1:
         p1 = st.selectbox("Игрок 1", players_list, index=0)
     with col2:
         remaining = [p for p in players_list if p != p1]
-        p2 = st.selectbox("Игрок 2", remaining if remaining else ["Нет данных"], index=0)
+        if not remaining:
+            remaining = ["Нет данных"]
+        p2 = st.selectbox("Игрок 2", remaining, index=0)
 
     # --- 2. ВЫБОР МЕТРИК ---
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    # Исключаем технические колонки
+    # Убираем неигровые метрики
     ignore = ['Rk', 'Age', 'Born', 'Matches', 'Starts', 'Mins', '90s'] 
     stats_cols = [c for c in numeric_cols if c not in ignore]
     
     st.sidebar.header("Настройки Радара")
+    # Выбираем первые 6 доступных метрик по умолчанию
     default_metrics = stats_cols[:6] if len(stats_cols) > 6 else stats_cols
     params = st.sidebar.multiselect("Выберите метрики", stats_cols, default=default_metrics)
 
     if len(params) < 3:
-        st.warning("⚠️ Выберите минимум 3 метрики в меню слева.")
+        st.warning("⚠️ Выберите минимум 3 метрики в меню слева для построения графика.")
         return
 
     # --- 3. ПОДГОТОВКА ДАННЫХ ---
@@ -87,7 +97,6 @@ def main():
     # --- 4. ОТРИСОВКА ---
     st.subheader(f"{p1} vs {p2}")
 
-    # Создаем пиццу
     baker = PyPizza(
         params=params,
         background_color="#0E1117",
@@ -98,21 +107,20 @@ def main():
         inner_circle_size=20
     )
 
+    # ИСПРАВЛЕНИЕ ЗДЕСЬ: убрали color_blank_root
     fig, ax = baker.make_pizza(
         p1_vals,
         compare_values=p2_vals,
         figsize=(8, 8),
-        color_blank_root=None,
         slice_colors=["#1A78CF"] * len(params),
         kwargs_slices=dict(edgecolor="#F2F2F2", zorder=2, linewidth=1),
         kwargs_compare=dict(facecolor="#FF4B4B", edgecolor="#222222", zorder=3, alpha=0.5, linewidth=2),
     )
 
-    # Подписи (без использования FontManager)
+    # Текстовые подписи
     fig.text(0.5, 0.97, f"{p1} vs {p2}", size=16, ha="center", color="#F2F2F2", fontweight='bold')
     fig.text(0.5, 0.93, "Сравнение процентилей", size=11, ha="center", color="#F2F2F2")
     
-    # Легенда
     fig.text(0.25, 0.02, f"🟦 {p1}", size=12, color="#1A78CF", ha="center", fontweight='bold')
     fig.text(0.75, 0.02, f"🟥 {p2}", size=12, color="#FF4B4B", ha="center", fontweight='bold')
 
@@ -125,5 +133,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

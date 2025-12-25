@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from mplsoccer import PyPizza
+import plotly.graph_objects as go
 from scipy import stats
 
 # --- НАСТРОЙКИ СТРАНИЦЫ ---
@@ -11,125 +11,179 @@ st.set_page_config(page_title="Сравнение Игроков", layout="wide"
 @st.cache_data
 def load_data():
     file_path = 'Top5PlayerData202526.csv'
-    
-    # Сначала пробуем UTF-8 (стандарт), если не выйдет - тогда latin1
+    # Пытаемся прочитать в разных кодировках, чтобы имена (Iñigo) были нормальными
     try:
         df = pd.read_csv(file_path, encoding='utf-8')
     except UnicodeDecodeError:
         df = pd.read_csv(file_path, encoding='latin1')
     
-    # Очистка имен колонок от пробелов
+    # Чистим пробелы в названиях колонок
     df.columns = [c.strip() for c in df.columns]
     return df
 
-# --- РАСЧЕТ ПРОЦЕНТИЛЕЙ ---
-def calculate_percentile(val, array):
-    if pd.isna(val):
-        return 0
-    return stats.percentileofscore(array, val)
+# --- РАСЧЕТ ПРОЦЕНТИЛЕЙ (0-99) ---
+def get_percentile(val, array):
+    if pd.isna(val): return 0
+    return int(stats.percentileofscore(array, val))
 
 # --- ГЛАВНАЯ ЧАСТЬ ---
 def main():
-    st.header("⚔️ Сравнение Игроков (Radars)")
-    
+    # Стиль заголовка
+    st.markdown("""
+        <h1 style='text-align: center; color: #fff;'>⚔️ PRO PLAYER COMPARISON</h1>
+    """, unsafe_allow_html=True)
+
     try:
         df = load_data()
     except FileNotFoundError:
-        st.error("Файл Top5PlayerData202526.csv не найден!")
+        st.error("❌ Файл Top5PlayerData202526.csv не найден!")
         return
 
-    # --- 1. ВЫБОР ИГРОКОВ ---
-    col1, col2 = st.columns(2)
+    # --- 1. ФИЛЬТРЫ И ВЫБОР ---
+    st.sidebar.header("🔍 Настройки поиска")
     
     # Фильтр позиций
     if 'Pos' in df.columns:
-        all_positions = df['Pos'].unique().tolist()
-        # По умолчанию выбираем первую позицию, чтобы список не был пустым
-        pos_filter = st.sidebar.multiselect("Фильтр позиций", all_positions, default=all_positions[:1])
-        if pos_filter:
-            df_filtered = df[df['Pos'].isin(pos_filter)]
+        positions = df['Pos'].unique().tolist()
+        selected_pos = st.sidebar.multiselect("Позиция", positions, default=positions[:1])
+        if selected_pos:
+            df_filtered = df[df['Pos'].isin(selected_pos)]
         else:
             df_filtered = df
     else:
         df_filtered = df
 
-    players_list = df_filtered['Player'].unique()
+    # Выбор игроков
+    col1, col2 = st.columns(2)
+    players = df_filtered['Player'].unique()
     
-    if len(players_list) == 0:
-        st.warning("Нет игроков с выбранной позицией.")
+    if len(players) == 0:
+        st.error("Нет игроков с выбранной позицией.")
         return
 
     with col1:
-        p1 = st.selectbox("Игрок 1", players_list, index=0)
+        p1 = st.selectbox("🔷 Игрок 1", players, index=0)
     with col2:
-        remaining = [p for p in players_list if p != p1]
-        if not remaining:
-            remaining = ["Нет данных"]
-        p2 = st.selectbox("Игрок 2", remaining, index=0)
+        # Убираем первого из списка второго
+        others = [p for p in players if p != p1]
+        p2 = st.selectbox("🔶 Игрок 2", others if others else ["Нет данных"], index=0)
 
-    # --- 2. ВЫБОР МЕТРИК ---
+    # --- 2. МЕТРИКИ ---
+    # Только числа
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    # Убираем неигровые метрики
-    ignore = ['Rk', 'Age', 'Born', 'Matches', 'Starts', 'Mins', '90s'] 
-    stats_cols = [c for c in numeric_cols if c not in ignore]
-    
-    st.sidebar.header("Настройки Радара")
-    # Выбираем первые 6 доступных метрик по умолчанию
-    default_metrics = stats_cols[:6] if len(stats_cols) > 6 else stats_cols
-    params = st.sidebar.multiselect("Выберите метрики", stats_cols, default=default_metrics)
+    ignore = ['Rk', 'Age', 'Born', 'Matches', 'Starts', 'Mins', '90s']
+    metrics = [c for c in numeric_cols if c not in ignore]
 
-    if len(params) < 3:
-        st.warning("⚠️ Выберите минимум 3 метрики в меню слева для построения графика.")
+    st.sidebar.subheader("📊 Параметры радара")
+    # Дефолтные метрики (первые 6)
+    selected_metrics = st.sidebar.multiselect("Метрики", metrics, default=metrics[:6])
+
+    if len(selected_metrics) < 3:
+        st.warning("⚠️ Выбери минимум 3 метрики.")
         return
 
     # --- 3. ПОДГОТОВКА ДАННЫХ ---
-    p1_data = df[df['Player'] == p1].iloc[0]
-    p2_data = df[df['Player'] == p2].iloc[0]
+    p1_row = df[df['Player'] == p1].iloc[0]
+    p2_row = df[df['Player'] == p2].iloc[0]
 
     p1_vals = []
     p2_vals = []
+    p1_raw = [] # Реальные цифры для тултипа
+    p2_raw = []
 
-    for p in params:
-        col_values = df_filtered[p].dropna()
-        p1_vals.append(int(calculate_percentile(p1_data[p], col_values)))
-        p2_vals.append(int(calculate_percentile(p2_data[p], col_values)))
+    for m in selected_metrics:
+        col_data = df_filtered[m].dropna()
+        # Считаем ранг (0-100)
+        p1_vals.append(get_percentile(p1_row[m], col_data))
+        p2_vals.append(get_percentile(p2_row[m], col_data))
+        # Сохраняем реальные значения
+        p1_raw.append(p1_row[m])
+        p2_raw.append(p2_row[m])
 
-    # --- 4. ОТРИСОВКА ---
-    st.subheader(f"{p1} vs {p2}")
+    # Замыкаем круг для Plotly Radar
+    p1_vals.append(p1_vals[0])
+    p2_vals.append(p2_vals[0])
+    p1_raw.append(p1_raw[0])
+    p2_raw.append(p2_raw[0])
+    metrics_cyclic = selected_metrics + [selected_metrics[0]]
 
-    baker = PyPizza(
-        params=params,
-        background_color="#0E1117",
-        straight_line_color="#EBEBEB",
-        straight_line_lw=1,
-        last_circle_lw=0,
-        other_circle_lw=0,
-        inner_circle_size=20
+    # --- 4. РИСУЕМ КРАСИВЫЙ РАДАР (PLOTLY) ---
+    fig = go.Figure()
+
+    # Игрок 1
+    fig.add_trace(go.Scatterpolar(
+        r=p1_vals,
+        theta=metrics_cyclic,
+        fill='toself',
+        name=p1,
+        line=dict(color='#00F0FF', width=3), # Неоновый голубой
+        fillcolor='rgba(0, 240, 255, 0.3)',  # Прозрачный голубой
+        customdata=p1_raw,
+        hovertemplate="<b>%{theta}</b><br>Ранг: %{r}%<br>Значение: %{customdata}<extra></extra>"
+    ))
+
+    # Игрок 2
+    fig.add_trace(go.Scatterpolar(
+        r=p2_vals,
+        theta=metrics_cyclic,
+        fill='toself',
+        name=p2,
+        line=dict(color='#FF0055', width=3), # Неоновый розовый/красный
+        fillcolor='rgba(255, 0, 85, 0.3)',   # Прозрачный красный
+        customdata=p2_raw,
+        hovertemplate="<b>%{theta}</b><br>Ранг: %{r}%<br>Значение: %{customdata}<extra></extra>"
+    ))
+
+    # Настройки дизайна
+    fig.update_layout(
+        polar=dict(
+            bgcolor="rgba(0,0,0,0)",
+            radialaxis=dict(
+                visible=True,
+                range=[0, 100],
+                showticklabels=False, # Скрываем цифры оси 0-100, чтобы не засорять
+                linecolor='rgba(255,255,255,0.2)',
+                gridcolor='rgba(255,255,255,0.1)'
+            ),
+            angularaxis=dict(
+                linecolor='rgba(255,255,255,0.2)',
+                gridcolor='rgba(255,255,255,0.1)',
+                tickfont=dict(size=11, color="white")
+            )
+        ),
+        paper_bgcolor='rgba(0,0,0,0)', # Прозрачный фон
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color="white"),
+        margin=dict(l=80, r=80, t=40, b=40),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.15,
+            xanchor="center",
+            x=0.5
+        )
     )
 
-    # ИСПРАВЛЕНИЕ ЗДЕСЬ: убрали color_blank_root
-    fig, ax = baker.make_pizza(
-        p1_vals,
-        compare_values=p2_vals,
-        figsize=(8, 8),
-        slice_colors=["#1A78CF"] * len(params),
-        kwargs_slices=dict(edgecolor="#F2F2F2", zorder=2, linewidth=1),
-        kwargs_compare=dict(facecolor="#FF4B4B", edgecolor="#222222", zorder=3, alpha=0.5, linewidth=2),
-    )
+    st.plotly_chart(fig, use_container_width=True)
 
-    # Текстовые подписи
-    fig.text(0.5, 0.97, f"{p1} vs {p2}", size=16, ha="center", color="#F2F2F2", fontweight='bold')
-    fig.text(0.5, 0.93, "Сравнение процентилей", size=11, ha="center", color="#F2F2F2")
+    # --- 5. ТАБЛИЦА СРАВНЕНИЯ ---
+    st.divider()
+    st.markdown("### 📋 Детальная статистика")
     
-    fig.text(0.25, 0.02, f"🟦 {p1}", size=12, color="#1A78CF", ha="center", fontweight='bold')
-    fig.text(0.75, 0.02, f"🟥 {p2}", size=12, color="#FF4B4B", ha="center", fontweight='bold')
-
-    fig.set_facecolor('#0E1117')
-    st.pyplot(fig)
-
-    # --- 5. ТАБЛИЦА ---
-    with st.expander("Точные цифры"):
-        st.dataframe(df[df['Player'].isin([p1, p2])][['Player'] + params].set_index('Player').T)
+    # Красивая таблица
+    compare_df = pd.DataFrame({
+        'Metric': selected_metrics,
+        f'{p1}': [p1_row[m] for m in selected_metrics],
+        f'{p2}': [p2_row[m] for m in selected_metrics],
+        f'Разница': [p1_row[m] - p2_row[m] for m in selected_metrics]
+    })
+    
+    # Форматирование таблицы
+    st.dataframe(
+        compare_df.style.background_gradient(cmap="RdBu", subset=['Разница']),
+        use_container_width=True,
+        hide_index=True
+    )
 
 if __name__ == "__main__":
     main()
